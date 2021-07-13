@@ -1,5 +1,7 @@
 selenium
 beautifulsoup4
+requests
 pandas
+openpyxl
 scikit-learn
 nltk

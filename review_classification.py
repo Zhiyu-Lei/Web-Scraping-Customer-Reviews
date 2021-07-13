@@ -10,7 +10,7 @@ from nltk.stem.porter import PorterStemmer
 KEYWORDS_DICT = {
     "8.8 error code": re.compile("blink.+?88|beep.+?88|flash.+?88|88.+?error|8\\.8"),
     "sound": re.compile("nois|loud|buzz|rattl|sound[a-z\\s]+like|make[a-z\\s]+sound"),
-    "missing parts": re.compile("missing|(?:not|n't|n’t)[a-z\\s]+(?:come|receive|contain)"),
+    "missing parts": re.compile("missing|(?:not|n't|n’t)[a-z\\s]+(?:come|receive|contain|include)"),
     "used unit": re.compile("used\\s+(?:unit|item)|(?:be|was|were)[a-z\\s]+used|previous\\s+return|repackage|restock"),
     "wifi": re.compile("wifi|wi-fi")
 }
@@ -35,7 +35,7 @@ def vectorize(labeled_data):
     training_text = labeled_data.apply(process_text, axis=1)
     vectorizer = TfidfVectorizer(ngram_range=(1, 2), max_features=300)
     vectors = vectorizer.fit_transform(training_text)
-    with open("review_classification\\text_vectorizer.vec", "wb") as vectorizer_file:
+    with open("review_classification/text_vectorizer.vec", "wb") as vectorizer_file:
         pickle.dump(vectorizer, vectorizer_file)
     return vectorizer, vectors
 
@@ -43,12 +43,12 @@ def vectorize(labeled_data):
 def train_separate_model(labeled_data, vectors, tag):
     nb_classifier = MultinomialNB()
     nb_classifier.fit(vectors, labeled_data[tag])
-    with open("review_classification\\classifier for " + tag + ".model", "wb") as model_file:
+    with open("review_classification/classifier for " + tag + ".model", "wb") as model_file:
         pickle.dump(nb_classifier, model_file)
     return nb_classifier
 
 
-def train_models(tags_to_train, training_data_path="review_classification\\training_data.csv"):
+def train_models(tags_to_train, training_data_path="review_classification/training_data.csv"):
     data = pd.read_csv(training_data_path)
     data["Category"] = data["Category"].map(lambda cat: cat.strip().lower() if type(cat) == str else "")
     split_tags = CountVectorizer(tokenizer=lambda x: re.split("\\s+/\\s+", x), binary=True)
@@ -80,11 +80,11 @@ def predict_labels(unlabeled_data, candidate_tags, one_hot_encoding=False):
         else:
             tags_ml.add(tag)
     try:
-        with open("review_classification\\text_vectorizer.vec", "rb") as vectorizer_file:
+        with open("review_classification/text_vectorizer.vec", "rb") as vectorizer_file:
             vectorizer = pickle.load(vectorizer_file)
         models = dict()
         for tag in tags_ml:
-            with open("review_classification\\classifier for " + tag + ".model", "rb") as model_file:
+            with open("review_classification/classifier for " + tag + ".model", "rb") as model_file:
                 models[tag] = pickle.load(model_file)
     except FileNotFoundError:
         vectorizer, models = train_models(tags_ml)

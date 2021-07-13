@@ -79,20 +79,22 @@ def parse_product(driver, url, model=None, day_lim=None):
 
 
 if __name__ == "__main__":
-    with open("amazon_input.json") as f:
-        data = json.load(f)
-    urls, size2model, model2desc = data["urls"], data["size2model"], data["model2desc"]
     parser = argparse.ArgumentParser(description="Extract customer reviews for product on Amazon")
+    parser.add_argument("--input", type=str, default="amazon_input",
+                        help="Name of input .json file (default amazon_input)")
     parser.add_argument("--category", type=str, help="Category of products")
     parser.add_argument("--days", type=int, default=7, help="Limit of days before today (default 7)")
     parser.add_argument("--output", type=str, default="Amazon_Reviews",
                         help="Name of output .xlsx file (default Amazon_Reviews)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
+    with open(args.input + ".json") as f:
+        data = json.load(f)
+    urls, size2model, model2desc = data["urls"], data["size2model"], data["model2desc"]
     if args.category not in urls:
         logging.error("Invalid category: {}".format(args.category))
         quit()
-    DRIVER = webdriver.Chrome(".\\chromedriver")
+    DRIVER = webdriver.Chrome("./chromedriver")
     DRIVER.set_page_load_timeout(10)
     _ = input("Press ENTER to proceed")
     urls_to_do = urls[args.category]
@@ -104,5 +106,5 @@ if __name__ == "__main__":
     DRIVER.quit()
     product_result["Date"] = pd.to_datetime(product_result["Date"], format="%B %d, %Y").map(lambda date_: date_.date())
     product_result = predict_labels(product_result, TAGs, True)
-    product_result.to_excel("outputs\\" + args.output + ".xlsx", header=True, index=False)
+    product_result.to_excel("outputs/" + args.output + ".xlsx", header=True, index=False)
     logging.info("Process completed! Extracted {} reviews".format(len(product_result)))

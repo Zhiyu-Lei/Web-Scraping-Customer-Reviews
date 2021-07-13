@@ -34,17 +34,14 @@ def extract(soup, dates, ratings, titles, bodies, images, earliest=None):
         bodies.append(body.text.strip() if body else None)
         images_raw = review.find_all("div", {"class": "media-carousel__media"})
         images.append("\n".join(
-            re.findall('url\\("(\\S+?)"\\)', image.find("button").attrs["style"])[0] for image in images_raw))
+            re.findall('url\\("?(\\S+?)"?\\)', image.find("button").attrs["style"])[0] for image in images_raw))
     return True
 
 
 def parse_product(driver, url, day_lim=None, err_terminate=False):
     driver.get(url)
     time.sleep(2 + random.random())
-    try:
-        drop_down = Select(driver.find_element_by_class_name("drop-down__select"))
-    except NoSuchElementException:
-        return None
+    drop_down = Select(driver.find_element_by_class_name("drop-down__select"))
     drop_down.select_by_value("newest")
     time.sleep(1 + random.random())
     drop_down.select_by_value("newest")
@@ -134,7 +131,7 @@ if __name__ == "__main__":
                         help="Name of output .xlsx file (default Homedepot_Reviews)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, filename="logging.log", filemode="w")
-    DRIVER = webdriver.Chrome(".\\chromedriver")
+    DRIVER = webdriver.Chrome("./chromedriver")
     DRIVER.set_page_load_timeout(10)
     _ = input("Press ENTER to proceed")
     if args.mode == "category" and args.category in URLs:
@@ -153,7 +150,7 @@ if __name__ == "__main__":
             except TimeoutException:
                 logging.error("Timeout: {}".format(target_url))
                 DRIVER.quit()
-                DRIVER = webdriver.Chrome(".\\chromedriver")
+                DRIVER = webdriver.Chrome("./chromedriver")
                 DRIVER.set_page_load_timeout(10)
             except Exception:
                 logging.error("Failed: {}".format(target_url))
@@ -161,14 +158,17 @@ if __name__ == "__main__":
         final = pd.concat(results)
         final["Date"] = pd.to_datetime(final["Date"], format="%b %d, %Y").map(lambda date_: date_.date())
         final = predict_labels(final, TAGs, True)
-        final.to_excel("outputs\\" + args.output + ".xlsx", header=True, index=False)
+        final.to_excel("outputs/" + args.output + ".xlsx", header=True, index=False)
         logging.info("Process completed!")
     elif args.mode == "product":
         product_result = parse_product(DRIVER, args.product, args.days, err_terminate=True)
         DRIVER.quit()
+        if product_result is None or len(product_result) == 0:
+            logging.warning("No new reviews: {}".format(args.product))
+            quit()
         product_result["Date"] = pd.to_datetime(product_result["Date"], format="%b %d, %Y").map(lambda dt: dt.date())
         product_result = predict_labels(product_result, TAGs, True)
-        product_result.to_excel("outputs\\" + args.output + ".xlsx", header=True, index=False)
+        product_result.to_excel("outputs/" + args.output + ".xlsx", header=True, index=False)
         logging.info("Process completed! Extracted {} reviews".format(len(product_result)))
     else:
         DRIVER.quit()
