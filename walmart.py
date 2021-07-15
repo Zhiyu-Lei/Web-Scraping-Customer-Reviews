@@ -1,7 +1,8 @@
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, ElementNotInteractableException
 from bs4 import BeautifulSoup
 import requests
+import tqdm
 import pandas as pd
 import time
 import datetime
@@ -83,7 +84,7 @@ def parse_product(product_id, url, day_lim=None, keyword=None):
 
 def parse_content(driver, url):
     driver.get(url)
-    _ = input("Press ENTER to proceed")
+    # _ = input("Press ENTER to proceed")  # uncomment this is verification needed at the first page
     time.sleep(2 + random.random())
     target_items = set()
     while True:
@@ -102,7 +103,10 @@ def parse_content(driver, url):
         except NoSuchElementException:
             break
         time.sleep(1 + random.random())
-        next_link.click()
+        try:
+            next_link.click()
+        except ElementNotInteractableException:
+            _ = input("Complete verification and press ENTER to proceed")
         time.sleep(1 + random.random())
     return target_items
 
@@ -117,8 +121,9 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="Walmart_Reviews",
                         help="Name of output .xlsx file (default Walmart_Reviews)")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, filename="logging.log", filemode="w")
+    logging.basicConfig(level=logging.INFO)
     if args.mode == "category" and args.category in URLs:
+        logging.basicConfig(level=logging.INFO, filename="logging.log", filemode="w")
         DRIVER = webdriver.Chrome("./chromedriver")
         DRIVER.set_page_load_timeout(10)
         _ = input("Press ENTER to proceed")
@@ -127,7 +132,7 @@ if __name__ == "__main__":
         DRIVER.quit()
         logging.info("Found {} products".format(len(targets)))
         results = []
-        for target_id, target_url in targets:
+        for target_id, target_url in tqdm.tqdm(targets):
             logging.info("Getting product ID {}".format(target_id))
             try:
                 results.append(parse_product(target_id, target_url, args.days, args.category))

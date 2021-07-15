@@ -1,6 +1,7 @@
 selenium
 beautifulsoup4
 requests
+tqdm
 pandas
 openpyxl
 scikit-learn

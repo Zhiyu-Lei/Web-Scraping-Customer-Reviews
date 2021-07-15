@@ -2,6 +2,7 @@ from selenium import webdriver
 from selenium.webdriver.support.ui import Select
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from bs4 import BeautifulSoup
+import tqdm
 import pandas as pd
 import re
 import time
@@ -69,7 +70,7 @@ def parse_product(driver, url, day_lim=None, err_terminate=False):
             curr_page = soup.find("span", {"class": "pager-summary__bold"}).text
         except AttributeError:
             if err_terminate:
-                logging.warning("Terminated after page {}".format(prev_page))
+                logging.warning("Terminated after page {}: {}".format(prev_page, url))
                 break
             else:
                 raise AttributeError
@@ -130,16 +131,17 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="Homedepot_Reviews",
                         help="Name of output .xlsx file (default Homedepot_Reviews)")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, filename="logging.log", filemode="w")
+    logging.basicConfig(level=logging.INFO)
     DRIVER = webdriver.Chrome("./chromedriver")
     DRIVER.set_page_load_timeout(10)
     _ = input("Press ENTER to proceed")
     if args.mode == "category" and args.category in URLs:
+        logging.basicConfig(level=logging.INFO, filename="logging.log", filemode="w")
         URL = URLs[args.category]
         targets = parse_content(DRIVER, URL)
         logging.info("Found {} products".format(len(targets)))
         results = []
-        for target in targets:
+        for target in tqdm.tqdm(targets):
             target_url = "https://www.homedepot.com/p/reviews" + target[2:]
             try:
                 results.append(parse_product(DRIVER, target_url, args.days))
