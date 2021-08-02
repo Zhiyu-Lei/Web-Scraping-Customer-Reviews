@@ -1,5 +1,5 @@
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, ElementNotInteractableException
+from selenium.common.exceptions import NoSuchElementException, ElementNotInteractableException, TimeoutException
 from bs4 import BeautifulSoup
 import requests
 import tqdm
@@ -10,6 +10,7 @@ import random
 import argparse
 import logging
 from review_classification import predict_labels
+from file_output import df2excel
 
 URLs = {
     "Window": "https://www.walmart.com/browse/home-improvement/window-air-conditioners/1072864_133032_133026_587566",
@@ -38,13 +39,19 @@ def extract(reviews, dates, ratings, titles, bodies, images, earliest=None):
     return True
 
 
-def parse_product(product_id, url, day_lim=None, keyword=None):
+def parse_product(driver, product_id, url, day_lim=None):
     url_search = "https://www.walmart.com/terra-firma/fetch?rgs=REVIEWS_MAP"
     POST_DATA["itemId"] = product_id
-    page = requests.get(url, headers=HEADERS).text
+    driver.get(url)
+    time.sleep(0.5 + random.random())
+    page = driver.page_source
     soup = BeautifulSoup(page, "html.parser")
     model_description = soup.find("h1").text
-    assert not keyword or keyword.lower() in model_description.lower()
+    if "verify" in model_description.lower():
+        _ = input("Complete verification and press ENTER to proceed")
+        page = driver.page_source
+        soup = BeautifulSoup(page, "html.parser")
+        model_description = soup.find("h1").text
     earliest = datetime.date.today() - datetime.timedelta(days=day_lim) if day_lim else None
     dates, ratings, titles, bodies, images = [], [], [], [], []
     page_no = 1
@@ -57,8 +64,7 @@ def parse_product(product_id, url, day_lim=None, keyword=None):
             to_continue = extract(reviews, dates, ratings, titles, bodies, images, earliest)
             page_no += 1
         else:
-            print("Fail", url, result.status_code)
-            time.sleep(4 + random.random())
+            raise Exception
         time.sleep(1 + random.random())
     result = pd.DataFrame({"Date": dates, "Rating": ratings, "Title": titles, "Body": bodies, "Image": images})
 
@@ -82,7 +88,7 @@ def parse_product(product_id, url, day_lim=None, keyword=None):
     return result[["Manufacturer", "Model No.", "Model Description", "Date", "Rating", "Title", "Body", "Image"]]
 
 
-def parse_content(driver, url):
+def parse_content(driver, url, keyword):
     driver.get(url)
     # _ = input("Press ENTER to proceed")  # uncomment this is verification needed at the first page
     time.sleep(2 + random.random())
@@ -91,9 +97,13 @@ def parse_content(driver, url):
         for item in driver.find_elements_by_class_name("Grid-col.u-size-6-12.u-size-1-4-m.u-size-1-5-xl"):
             try:
                 item.find_element_by_class_name("stars-reviews-count")
-                product_id = item.find_element_by_class_name("search-result-gridview-item-wrapper")\
+                hyperlink = item.find_elements_by_tag_name("a")[1]
+                desc = hyperlink.find_element_by_tag_name("span").text
+                if keyword.lower() not in desc.lower():
+                    continue
+                product_id = item.find_element_by_class_name("search-result-gridview-item-wrapper") \
                     .get_attribute("data-id")
-                product_url = item.find_element_by_tag_name("a").get_attribute("href")
+                product_url = hyperlink.get_attribute("href")
                 target_items.add((product_id, product_url))
             except NoSuchElementException:
                 pass
@@ -118,45 +128,51 @@ if __name__ == "__main__":
     parser.add_argument("--productID", type=str, help="ID of the single product")
     parser.add_argument("--productURL", type=str, help="URL of the single product")
     parser.add_argument("--days", type=int, default=7, help="Limit of days before today (default 7)")
+    parser.add_argument("--predict_labels", action="store_true", help="Indicate labels prediction")
     parser.add_argument("--output", type=str, default="Walmart_Reviews",
                         help="Name of output .xlsx file (default Walmart_Reviews)")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO)
+    DRIVER = webdriver.Chrome("./chromedriver")
+    DRIVER.set_page_load_timeout(10)
+    _ = input("Press ENTER to proceed")
     if args.mode == "category" and args.category in URLs:
         logging.basicConfig(level=logging.INFO, filename="logging.log", filemode="w")
-        DRIVER = webdriver.Chrome("./chromedriver")
-        DRIVER.set_page_load_timeout(10)
-        _ = input("Press ENTER to proceed")
         URL = URLs[args.category]
-        targets = parse_content(DRIVER, URL)
-        DRIVER.quit()
+        targets = parse_content(DRIVER, URL, args.category)
         logging.info("Found {} products".format(len(targets)))
         results = []
         for target_id, target_url in tqdm.tqdm(targets):
             logging.info("Getting product ID {}".format(target_id))
             try:
-                results.append(parse_product(target_id, target_url, args.days, args.category))
+                results.append(parse_product(DRIVER, target_id, target_url, args.days))
                 if results[-1] is not None and len(results[-1]) > 0:
                     logging.info("Success: {}, extracted {} reviews".format(results[-1].iloc[0, 2], len(results[-1])))
                 else:
                     logging.warning("No new reviews: {}".format(target_url))
-            except AssertionError:
-                logging.warning("Category does not match: {}".format(target_url))
+            except TimeoutException:
+                logging.error("Timeout: {}".format(target_url))
+                DRIVER.quit()
+                DRIVER = webdriver.Chrome("./chromedriver")
+                DRIVER.set_page_load_timeout(10)
             except Exception:
                 logging.error("Failed: {}".format(target_url))
+        DRIVER.quit()
         final = pd.concat(results)
-        final["Date"] = pd.to_datetime(final["Date"], format="%m/%d/%Y").map(lambda date_: date_.date())
-        final = predict_labels(final, TAGs, True)
-        final.to_excel("outputs/" + args.output + ".xlsx", header=True, index=False)
-        logging.info("Process completed!")
     elif args.mode == "product":
-        product_result = parse_product(args.productID, args.productURL, args.days)
-        if product_result is None or len(product_result) == 0:
+        logging.basicConfig(level=logging.INFO)
+        final = parse_product(DRIVER, args.productID, args.productURL, args.days)
+        DRIVER.quit()
+        if final is None or len(final) == 0:
             logging.warning("No new reviews: {}".format(args.productURL))
             quit()
-        product_result["Date"] = pd.to_datetime(product_result["Date"], format="%m/%d/%Y").map(lambda dt: dt.date())
-        product_result = predict_labels(product_result, TAGs, True)
-        product_result.to_excel("outputs/" + args.output + ".xlsx", header=True, index=False)
-        logging.info("Process completed! Extracted {} reviews".format(len(product_result)))
+        logging.info("Success, extracted {} reviews".format(len(final)))
     else:
+        DRIVER.quit()
+        final = None
         logging.error("Invalid mode or category")
+        quit()
+    final["Date"] = pd.to_datetime(final["Date"], format="%m/%d/%Y").map(lambda dt: dt.date())
+    if args.predict_labels:
+        final = predict_labels(final, TAGs, True)
+    file_name = df2excel(final, args.output)
+    logging.info("Process completed! File stored at {}".format(file_name))
