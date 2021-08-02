@@ -11,6 +11,7 @@ import random
 import argparse
 import logging
 from review_classification import predict_labels
+from file_output import df2excel
 
 URLs = {
     "Window": "https://www.homedepot.com/b/Heating-Venting-Cooling-Air-Conditioners-Window-Air-Conditioners/N-5yc1vZc4lu",
@@ -128,10 +129,10 @@ if __name__ == "__main__":
     parser.add_argument("--category", type=str, help="Category of products")
     parser.add_argument("--product", type=str, help="URL of the single product")
     parser.add_argument("--days", type=int, default=7, help="Limit of days before today (default 7)")
+    parser.add_argument("--predict_labels", action="store_true", help="Indicate labels prediction")
     parser.add_argument("--output", type=str, default="Homedepot_Reviews",
                         help="Name of output .xlsx file (default Homedepot_Reviews)")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO)
     DRIVER = webdriver.Chrome("./chromedriver")
     DRIVER.set_page_load_timeout(10)
     _ = input("Press ENTER to proceed")
@@ -158,20 +159,21 @@ if __name__ == "__main__":
                 logging.error("Failed: {}".format(target_url))
         DRIVER.quit()
         final = pd.concat(results)
-        final["Date"] = pd.to_datetime(final["Date"], format="%b %d, %Y").map(lambda date_: date_.date())
-        final = predict_labels(final, TAGs, True)
-        final.to_excel("outputs/" + args.output + ".xlsx", header=True, index=False)
-        logging.info("Process completed!")
     elif args.mode == "product":
-        product_result = parse_product(DRIVER, args.product, args.days, err_terminate=True)
+        logging.basicConfig(level=logging.INFO)
+        final = parse_product(DRIVER, args.product, args.days, err_terminate=True)
         DRIVER.quit()
-        if product_result is None or len(product_result) == 0:
+        if final is None or len(final) == 0:
             logging.warning("No new reviews: {}".format(args.product))
             quit()
-        product_result["Date"] = pd.to_datetime(product_result["Date"], format="%b %d, %Y").map(lambda dt: dt.date())
-        product_result = predict_labels(product_result, TAGs, True)
-        product_result.to_excel("outputs/" + args.output + ".xlsx", header=True, index=False)
-        logging.info("Process completed! Extracted {} reviews".format(len(product_result)))
+        logging.info("Success, extracted {} reviews".format(len(final)))
     else:
         DRIVER.quit()
+        final = None
         logging.error("Invalid mode or category")
+        quit()
+    final["Date"] = pd.to_datetime(final["Date"], format="%b %d, %Y").map(lambda dt: dt.date())
+    if args.predict_labels:
+        final = predict_labels(final, TAGs, True)
+    file_name = df2excel(final, args.output)
+    logging.info("Process completed! File stored at {}".format(file_name))
