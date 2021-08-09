@@ -7,11 +7,12 @@ Please make sure all the required site-packages are installed (running command `
 ## Extract Customer Reviews
 For Homedepot and Walmart, two modes are available:
 + Get reviews for an entire category. The URL of the content page is required to be included in the `URLs` dictionary variable with category name as the key, and URLs of each product's review page will be extracted first by parsing the content page.
-  + Command for Homedepot: `python homedepot.py [-h] --category CATEGORY [--days DAYS] [--output OUTPUT]`
-  + Command for Walmart: `python walmart.py [-h] --category CATEGORY [--days DAYS] [--output OUTPUT]`
+  + Command for Homedepot: `python homedepot.py [-h] --category CATEGORY [--days DAYS] [--predict_labels] [--output OUTPUT]`
+  + Command for Walmart: `python walmart.py [-h] --category CATEGORY [--days DAYS] [--predict_labels] [--output OUTPUT]`
 + Get reviews for a specific product. The URL of the product's review page is required to be passed through command line arguments.
-  + Command for Homedepot: `python3 homedepot.py [-h] --mode product --product PRODUCT [--days DAYS] [--output OUTPUT]`
-  + Command for Walmart: `python3 walmart.py [-h] --mode product --product PRODUCT [--days DAYS] [--output OUTPUT]`
+  + Command for Homedepot: `python3 homedepot.py [-h] --mode product --product PRODUCT [--days DAYS] [--predict_labels] [--output OUTPUT]`
+  + Command for Walmart: `python3 walmart.py [-h] --mode product --productID PRODUCTID --productURL PRODUCTURL [--days DAYS] [--predict_labels] [--output OUTPUT]`
+    + Note: ID of the product can be found by inspecting the content page on Walmart.
 
 For Amazon and Lowe's, only the mode of getting reviews for some specific products is available. The URLs of the products' review pages are required to be included in the `amazon_input.json` config file with three objects "urls", "size2model" and "model2desc", and the `lowes_input.json` config file with two objects "urls" and "model2desc", with the following formats respectively:
 ```json
@@ -57,4 +58,4 @@ The output spreadsheet contains information of manufacturers, model numbers, mod
 ## Classify Negative Reviews
 The training data and classification tags are for AC products. For some tags, rule based approach is used by regular expression matching in review texts. For the rest, maching learning based approach is used by vectorizing the review texts first with TF-IDF and then training a Naive Bayes classifier for each tag.
 
-Review classification is run directly after customer reviews are extracted successfully from target websites.
+Review classification is run directly after customer reviews are extracted successfully from target websites if `--predict_labels` flag is specified in the command argument.
